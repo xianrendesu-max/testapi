@@ -118,24 +118,26 @@ module.exports = async (req, res) => {
 
       try {
         const c = await info.getComments();
+        const commentContents = c.contents || c.data || [];
 
-        comments = c.contents.slice(0, 20).map(comment => ({
+        comments = commentContents.slice(0, 20).map(comment => ({
           author: comment.author?.name || "",
-          content: comment.content?.text || "",
-          likeCount: parseInt(comment.vote_count?.text?.replace(/[^0-9]/g, "")) || 0
+          content: comment.content?.text || comment.text || "",
+          likeCount: parseInt(comment.vote_count?.text?.replace(/[^0-9]/g, "") || comment.likes || "0") || 0
         }));
       } catch {}
 
+      const feedVideos = info.watch_next_feed?.videos || info.secondary_results || [];
       const related =
-        info.watch_next_feed?.videos?.slice(0, 20).map(v => ({
-          videoId: v.id || "",
-          title: v.title?.text || ""
+        feedVideos.slice(0, 20).map(v => ({
+          videoId: v.id || v.video_id || "",
+          title: v.title?.text || v.title || ""
         })) || [];
 
       return res.json({
-        title: info.basic_info.title || "",
-        videoId: info.basic_info.id || "",
-        description: info.basic_info.short_description || "",
+        title: info.basic_info?.title || "",
+        videoId: info.basic_info?.id || "",
+        description: info.basic_info?.short_description || "",
         comments: comments,
         recommendedVideos: related
       });
