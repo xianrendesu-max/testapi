@@ -1,0 +1,7 @@
+{
+  "name": "youtube-api",
+  "version": "1.0.0",
+  "dependencies": {
+    "youtubei.js": "^15.0.0"
+  }
+}
