@@ -1,8 +1,11 @@
-const { Innertube } = require("youtubei.js");
-
+let Innertube = null;
 let ytPromise = null;
 
-function getYT() {
+async function getYT() {
+  if (!Innertube) {
+    const module = await import("youtubei.js");
+    Innertube = module.Innertube;
+  }
   if (!ytPromise) {
     ytPromise = Innertube.create();
   }
