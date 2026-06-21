@@ -72,19 +72,22 @@ module.exports = async (req, res) => {
     if (action === "comments") {
       const id = req.query.id;
 
-      const info = await yt.getInfo(id);
-      const comments = await info.getComments();
+      const commentSection = await yt.getComments(id);
+      const commentThreads = commentSection.contents || [];
 
       return res.json({
-        commentCount: comments.contents.length,
-        comments: comments.contents.map(c => ({
-          author: c.author?.name || "",
-          authorId: c.author?.id || "",
-          content: c.content?.text || "",
-          publishedText: c.published?.text || "",
-          likeCount: parseInt(c.vote_count?.text?.replace(/[^0-9]/g, "")) || 0,
-          commentId: c.comment_id || ""
-        }))
+        commentCount: commentThreads.length,
+        comments: commentThreads.map(thread => {
+          const c = thread.comment;
+          return {
+            author: c?.author?.name || "",
+            authorId: c?.author?.id || "",
+            content: c?.content?.toString() || "",
+            publishedText: c?.published_time || "",
+            likeCount: c?.like_count || 0,
+            commentId: c?.comment_id || ""
+          };
+        })
       });
     }
 
@@ -94,7 +97,7 @@ module.exports = async (req, res) => {
       const info = await yt.getInfo(id);
 
       const related =
-        info.watch_next_feed?.videos?.map(v => ({
+        info.watch_next_feed?.secondary_results?.map(v => ({
           type: "video",
           title: v.title?.text || "",
           videoId: v.id || "",
@@ -117,21 +120,24 @@ module.exports = async (req, res) => {
       let comments = [];
 
       try {
-        const c = await info.getComments();
-        const commentContents = c.contents || c.data || [];
+        const commentSection = await yt.getComments(id);
+        const commentThreads = commentSection.contents || [];
 
-        comments = commentContents.slice(0, 20).map(comment => ({
-          author: comment.author?.name || "",
-          content: comment.content?.text || comment.text || "",
-          likeCount: parseInt(comment.vote_count?.text?.replace(/[^0-9]/g, "") || comment.likes || "0") || 0
-        }));
+        comments = commentThreads.slice(0, 20).map(thread => {
+          const c = thread.comment;
+          return {
+            author: c?.author?.name || "",
+            content: c?.content?.toString() || "",
+            likeCount: c?.like_count || 0
+          };
+        });
       } catch {}
 
-      const feedVideos = info.watch_next_feed?.videos || info.secondary_results || [];
+      const feedVideos = info.watch_next_feed?.secondary_results || [];
       const related =
         feedVideos.slice(0, 20).map(v => ({
-          videoId: v.id || v.video_id || "",
-          title: v.title?.text || v.title || ""
+          videoId: v.id || "",
+          title: v.title?.text || ""
         })) || [];
 
       return res.json({
