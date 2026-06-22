@@ -90,7 +90,8 @@ export default async (req, res) => {
     const fs = require("fs");
     const path = require("path");
     try {
-      const htmlPath = path.join(process.cwd(), "index.html");
+      // index.html から status.html に変更
+      const htmlPath = path.join(process.cwd(), "status.html");
       if (fs.existsSync(htmlPath)) {
         res.setHeader("Content-Type", "text/html; charset=utf-8");
         return res.end(fs.readFileSync(htmlPath, "utf-8"));
