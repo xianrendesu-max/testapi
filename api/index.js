@@ -1,3 +1,6 @@
+import fs from "fs";
+import path from "path";
+
 let Innertube = null;
 let ytPromise = null;
 
@@ -87,8 +90,6 @@ function formatPublishedAtJapanese(relativeText) {
 export default async (req, res) => {
   const urlObj = new URL(req.url, `http://${req.headers.host}`);
   if (urlObj.pathname === "/" && !req.query?.action) {
-    const fs = require("fs");
-    const path = require("path");
     try {
       const htmlPath = path.join(process.cwd(), "index.html");
       if (fs.existsSync(htmlPath)) {
