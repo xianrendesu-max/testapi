@@ -91,7 +91,13 @@ export default async (req, res) => {
   const urlObj = new URL(req.url, `http://${req.headers.host}`);
   if (urlObj.pathname === "/" && !req.query?.action) {
     try {
-      const htmlPath = path.join(process.cwd(), "index.html");
+      const htmlPath = path.join(process.cwd(), "
+status.html
+
+
+
+
+");
       if (fs.existsSync(htmlPath)) {
         res.setHeader("Content-Type", "text/html; charset=utf-8");
         return res.end(fs.readFileSync(htmlPath, "utf-8"));
