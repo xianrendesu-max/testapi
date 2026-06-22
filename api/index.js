@@ -7,7 +7,11 @@ async function getYT() {
     Innertube = module.Innertube;
   }
   if (!ytPromise) {
-    ytPromise = Innertube.create();
+    ytPromise = Innertube.create({
+      lang: "ja",
+      location: "JP",
+      generate_session_locally: true
+    });
   }
   return ytPromise;
 }
@@ -143,6 +147,36 @@ module.exports = async (req, res) => {
       });
     }
 
+    if (action === "search_shorts") {
+      const q = req.query.q;
+      const page = req.query.page || "1";
+      if (!q) {
+        return res.status(400).json({ error: "Missing q parameter" });
+      }
+
+      const targetPage = parseInt(page);
+      const ITEMS_PER_PAGE = 40;
+
+      let search = await yt.search(q);
+      let allShorts = [...(search.shorts || [])];
+      let continuationAttempts = 0;
+      const MAX_ATTEMPTS = 15;
+
+      while (allShorts.length < targetPage * ITEMS_PER_PAGE && search.has_continuation && continuationAttempts < MAX_ATTEMPTS) {
+        search = await search.getContinuation();
+        if (search.shorts) allShorts.push(...search.shorts);
+        continuationAttempts++;
+      }
+
+      const startIndex = (targetPage - 1) * ITEMS_PER_PAGE;
+      const endIndex = startIndex + ITEMS_PER_PAGE;
+
+      return res.json({
+        shorts: allShorts.slice(startIndex, endIndex),
+        nextPageToken: allShorts.length > endIndex || search.has_continuation ? String(targetPage + 1) : null
+      });
+    }
+
     if (action === "video") {
       const id = req.query.id;
 
@@ -190,16 +224,43 @@ module.exports = async (req, res) => {
 
       const info = await yt.getInfo(id);
 
-      const related =
-        info.watch_next_feed?.secondary_results?.map(v => ({
-          type: "video",
-          title: v.title?.text || "",
-          videoId: v.id || "",
-          author: v.author?.name || "",
-          authorId: v.author?.id || "",
-          lengthSeconds: v.duration?.seconds || 0,
-          viewCountText: v.view_count?.text || ""
-        })) || [];
+      let allCandidates = [];
+      if (Array.isArray(info.watch_next_feed)) allCandidates.push(...info.watch_next_feed);
+      if (Array.isArray(info.related_videos)) allCandidates.push(...info.related_videos);
+
+      let currentFeed = info;
+      const seenIds = new Set();
+      const relatedVideos = [];
+      const MAX_VIDEOS = 40;
+
+      for (const video of allCandidates) {
+        if (video.id) seenIds.add(video.id);
+        relatedVideos.push(video);
+      }
+
+      if (relatedVideos.length < MAX_VIDEOS && typeof currentFeed.getWatchNextContinuation === 'function') {
+        try {
+          currentFeed = await currentFeed.getWatchNextContinuation();
+          if (currentFeed && Array.isArray(currentFeed.watch_next_feed)) {
+            for (const video of currentFeed.watch_next_feed) {
+              if (video.id && !seenIds.has(video.id)) {
+                seenIds.add(video.id);
+                relatedVideos.push(video);
+              }
+            }
+          }
+        } catch (e) {}
+      }
+
+      const related = relatedVideos.map(v => ({
+        type: "video",
+        title: v.title?.text || "",
+        videoId: v.id || "",
+        author: v.author?.name || "",
+        authorId: v.author?.id || "",
+        lengthSeconds: v.duration?.seconds || 0,
+        viewCountText: v.view_count?.text || ""
+      }));
 
       return res.json({
         recommendedVideos: related
@@ -227,12 +288,38 @@ module.exports = async (req, res) => {
         });
       } catch {}
 
-      const feedVideos = info.watch_next_feed?.secondary_results || [];
-      const related =
-        feedVideos.slice(0, 20).map(v => ({
-          videoId: v.id || "",
-          title: v.title?.text || ""
-        })) || [];
+      let allCandidates = [];
+      if (Array.isArray(info.watch_next_feed)) allCandidates.push(...info.watch_next_feed);
+      if (Array.isArray(info.related_videos)) allCandidates.push(...info.related_videos);
+
+      let currentFeed = info;
+      const seenIds = new Set();
+      const relatedVideos = [];
+      const MAX_VIDEOS = 20;
+
+      for (const video of allCandidates) {
+        if (video.id) seenIds.add(video.id);
+        relatedVideos.push(video);
+      }
+
+      if (relatedVideos.length < MAX_VIDEOS && typeof currentFeed.getWatchNextContinuation === 'function') {
+        try {
+          currentFeed = await currentFeed.getWatchNextContinuation();
+          if (currentFeed && Array.isArray(currentFeed.watch_next_feed)) {
+            for (const video of currentFeed.watch_next_feed) {
+              if (video.id && !seenIds.has(video.id)) {
+                seenIds.add(video.id);
+                relatedVideos.push(video);
+              }
+            }
+          }
+        } catch (e) {}
+      }
+
+      const related = relatedVideos.slice(0, 20).map(v => ({
+        videoId: v.id || "",
+        title: v.title?.text || ""
+      }));
 
       return res.json({
         title: info.basic_info?.title || "",
