@@ -86,11 +86,16 @@ function formatPublishedAtJapanese(relativeText) {
 
 export default async (req, res) => {
   const urlObj = new URL(req.url, `http://${req.headers.host}`);
-  if (urlObj.pathname === "/" && !req.query?.action) {
+  
+  // 安全にクエリパラメータを取得するためのヘルパー（req.query がない場合に対応）
+  const getQueryParam = (key) => req.query?.[key] || urlObj.searchParams.get(key);
+  
+  const action = getQueryParam("action");
+
+  if (urlObj.pathname === "/" && !action) {
     const fs = require("fs");
     const path = require("path");
     try {
-      // index.html から status.html に変更
       const htmlPath = path.join(process.cwd(), "status.html");
       if (fs.existsSync(htmlPath)) {
         res.setHeader("Content-Type", "text/html; charset=utf-8");
@@ -99,9 +104,14 @@ export default async (req, res) => {
     } catch (e) {}
   }
 
-  if (req.query?.action === "status_api") {
+  if (action === "status_api") {
     res.setHeader("Content-Type", "application/json");
-    return res.json({
+    // res.json が未定義の環境対策としてフォールバックを用意
+    const sendJson = (data) => {
+      if (typeof res.json === "function") return res.json(data);
+      return res.end(JSON.stringify(data));
+    };
+    return sendJson({
       status: "Online",
       uptime: Math.floor((Date.now() - serverStartTime) / 1000),
       totalRequests: requestCount,
@@ -116,20 +126,25 @@ export default async (req, res) => {
   res.setHeader("Access-Control-Allow-Methods", "GET");
   res.setHeader("Content-Type", "application/json");
 
+  // レスポンス送信用の共通関数（res.jsonがない環境でも動くように補強）
+  const sendResponse = (status, data) => {
+    res.statusCode = status;
+    if (typeof res.json === "function") {
+      return res.json(data);
+    }
+    return res.end(JSON.stringify(data));
+  };
+
   try {
     const yt = await getYT();
 
-    const { action } = req.query;
-
     if (action === "search") {
-      logActivity(`Action: search, q: ${req.query.q || ""}`);
-      const q = req.query.q;
-      const pageToken = req.query.pageToken;
+      const q = getQueryParam("q");
+      const pageToken = getQueryParam("pageToken");
+      logActivity(`Action: search, q: ${q || ""}`);
 
       if (!q && !pageToken) {
-        return res.status(400).json({
-          error: "Missing q parameter"
-        });
+        return sendResponse(400, { error: "Missing q parameter" });
       }
 
       let result;
@@ -176,20 +191,20 @@ export default async (req, res) => {
           })
       );
 
-      return res.json({
+      return sendResponse(200, {
         results: videos,
         nextPageToken: result.continuation || null,
       });
     }
 
     if (action === "video") {
-      logActivity(`Action: video, id: ${req.query.id || ""}`);
-      const id = req.query.id;
+      const id = getQueryParam("id");
+      logActivity(`Action: video, id: ${id || ""}`);
 
       const info = await yt.getInfo(id);
       const v = info.basic_info;
 
-      return res.json({
+      return sendResponse(200, {
         title: v.title || "",
         videoId: v.id || "",
         videoThumbnails: v.thumbnail || [],
@@ -204,13 +219,13 @@ export default async (req, res) => {
     }
 
     if (action === "comments") {
-      logActivity(`Action: comments, id: ${req.query.id || ""}`);
-      const id = req.query.id;
+      const id = getQueryParam("id");
+      logActivity(`Action: comments, id: ${id || ""}`);
 
       const commentSection = await yt.getComments(id);
       const commentThreads = commentSection.contents || [];
 
-      return res.json({
+      return sendResponse(200, {
         commentCount: commentThreads.length,
         comments: commentThreads.map(thread => {
           const c = thread.comment;
@@ -227,8 +242,8 @@ export default async (req, res) => {
     }
 
     if (action === "related") {
-      logActivity(`Action: related, id: ${req.query.id || ""}`);
-      const id = req.query.id;
+      const id = getQueryParam("id");
+      logActivity(`Action: related, id: ${id || ""}`);
 
       const info = await yt.getInfo(id);
 
@@ -243,14 +258,14 @@ export default async (req, res) => {
           viewCountText: v.view_count?.text || ""
         })) || [];
 
-      return res.json({
+      return sendResponse(200, {
         recommendedVideos: related
       });
     }
 
     if (action === "full") {
-      logActivity(`Action: full, id: ${req.query.id || ""}`);
-      const id = req.query.id;
+      const id = getQueryParam("id");
+      logActivity(`Action: full, id: ${id || ""}`);
 
       const info = await yt.getInfo(id);
 
@@ -277,7 +292,7 @@ export default async (req, res) => {
           title: v.title?.text || ""
         })) || [];
 
-      return res.json({
+      return sendResponse(200, {
         title: info.basic_info?.title || "",
         videoId: info.basic_info?.id || "",
         description: info.basic_info?.short_description || "",
@@ -290,7 +305,7 @@ export default async (req, res) => {
       logActivity(`Action: trending`);
       const feed = await yt.getTrending();
 
-      return res.json(
+      return sendResponse(200, 
         feed.videos.map(v => ({
           title: v.title?.text || "",
           videoId: v.id || "",
@@ -300,7 +315,7 @@ export default async (req, res) => {
       );
     }
 
-    res.status(400).json({
+    return sendResponse(400, {
       success: false,
       error: "Unknown action"
     });
@@ -308,7 +323,7 @@ export default async (req, res) => {
   } catch (err) {
     errorCount++;
     logActivity(`Error: ${err.message}`);
-    res.status(500).json({
+    return sendResponse(500, {
       success: false,
       error: err.message
     });
