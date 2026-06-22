@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Server Status</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: #0f172a;
+            color: #e2e8f0;
+            margin: 0;
+            padding: 24px;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        h1 {
+            font-size: 24px;
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .status-badge {
+            font-size: 14px;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-weight: bold;
+        }
+        .online {
+            background-color: #10b981;
+            color: #ffffff;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+        .card {
+            background-color: #1e293b;
+            padding: 16px;
+            border-radius: 8px;
+            border: 1px solid #334155;
+        }
+        .card-label {
+            font-size: 12px;
+            color: #94a3b8;
+            margin-bottom: 4px;
+        }
+        .card-value {
+            font-size: 20px;
+            font-weight: bold;
+        }
+        .log-section {
+            background-color: #1e293b;
+            border-radius: 8px;
+            border: 1px solid #334155;
+            padding: 16px;
+        }
+        .log-title {
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 12px;
+            color: #f8fafc;
+        }
+        .log-console {
+            background-color: #020617;
+            padding: 12px;
+            border-radius: 6px;
+            height: 250px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            color: #38bdf8;
+        }
+        .log-entry {
+            margin-bottom: 4px;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>
+            API Server Dashboard 
+            <span id="statusBadge" class="status-badge online">Checking...</span>
+        </h1>
+
+        <div class="grid">
+            <div class="card">
+                <div class="card-label">稼働時間 (Uptime)</div>
+                <div id="uptime" class="card-value">0s</div>
+            </div>
+            <div class="card">
+                <div class="card-label">総リクエスト数</div>
+                <div id="totalRequests" class="card-value">0</div>
+            </div>
+            <div class="card">
+                <div class="card-label">エラー発生数</div>
+                <div id="errors" class="card-value" style="color: #f43f5e;">0</div>
+            </div>
+            <div class="card">
+                <div class="card-label">Innertube 初期化</div>
+                <div id="ytStatus" class="card-value">False</div>
+            </div>
+        </div>
+
+        <div class="log-section">
+            <div class="log-title">リアルタイム処理ログ (最新20件)</div>
+            <div id="logConsole" class="log-console">
+                <div class="log-entry">ログの読み込み中...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function formatUptime(seconds) {
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            const s = seconds % 60;
+            return `${h}h ${m}m ${s}s`;
+        }
+
+        async function fetchStatus() {
+            try {
+                const response = await fetch('/?action=status_api');
+                if (!response.ok) throw new Error('Network error');
+                const data = await response.json();
+
+                document.getElementById('statusBadge').textContent = data.status;
+                document.getElementById('statusBadge').className = 'status-badge online';
+                document.getElementById('uptime').textContent = formatUptime(data.uptime);
+                document.getElementById('totalRequests').textContent = data.totalRequests;
+                document.getElementById('errors').textContent = data.errors;
+                document.getElementById('ytStatus').textContent = data.ytInitialized ? 'Ready' : 'Pending';
+                document.getElementById('ytStatus').style.color = data.ytInitialized ? '#10b981' : '#eab308';
+
+                const logConsole = document.getElementById('logConsole');
+                if (data.logs && data.logs.length > 0) {
+                    logConsole.innerHTML = data.logs.map(log => `<div class="log-entry">${log}</div>`).join('');
+                } else {
+                    logConsole.innerHTML = '<div class="log-entry" style="color: #64748b;">まだリクエスト履歴はありません。</div>';
+                }
+            } catch (error) {
+                document.getElementById('statusBadge').textContent = 'Offline';
+                document.getElementById('statusBadge').className = 'status-badge';
+                document.getElementById('statusBadge').style.backgroundColor = '#f43f5e';
+            }
+        }
+
+        setInterval(fetchStatus, 2000);
+        fetchStatus();
+    </script>
+</body>
+</html>
