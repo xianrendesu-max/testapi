@@ -1,6 +1,3 @@
-import fs from "fs";
-import path from "path";
-
 let Innertube = null;
 let ytPromise = null;
 
@@ -90,14 +87,10 @@ function formatPublishedAtJapanese(relativeText) {
 export default async (req, res) => {
   const urlObj = new URL(req.url, `http://${req.headers.host}`);
   if (urlObj.pathname === "/" && !req.query?.action) {
+    const fs = require("fs");
+    const path = require("path");
     try {
-      const htmlPath = path.join(process.cwd(), "
-status.html
-
-
-
-
-");
+      const htmlPath = path.join(process.cwd(), "index.html");
       if (fs.existsSync(htmlPath)) {
         res.setHeader("Content-Type", "text/html; charset=utf-8");
         return res.end(fs.readFileSync(htmlPath, "utf-8"));
