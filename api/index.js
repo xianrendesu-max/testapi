@@ -85,23 +85,31 @@ function formatPublishedAtJapanese(relativeText) {
 }
 
 export default async (req, res) => {
-  const urlObj = new URL(req.url, `http://${req.headers.host}`);
+  // どの環境でも確実にクエリパラメータをパースする構造に変更
+  const host = req.headers.host || "localhost";
+  const urlObj = new URL(req.url, `http://${host}`);
   
-  // 安全にクエリパラメータを取得するためのヘルパー（req.query がない場合に対応）
-  const getQueryParam = (key) => req.query?.[key] || urlObj.searchParams.get(key);
+  const getQueryParam = (key) => {
+    if (req.query && req.query[key]) return req.query[key];
+    return urlObj.searchParams.get(key);
+  };
   
   const action = getQueryParam("action");
 
-  // 1. 先に API 系のアクションを最優先で判定する
+  // リクエスト数を正確にカウントするため、すべての正常なエンドポイントの前に配置
+  requestCount++;
+
+  // 1. ダッシュボードAPIの判定
   if (action === "status_api") {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Methods", "GET");
     res.setHeader("Content-Type", "application/json");
-    // res.json が未定義の環境対策としてフォールバックを用意
+    
     const sendJson = (data) => {
       if (typeof res.json === "function") return res.json(data);
       return res.end(JSON.stringify(data));
     };
+    
     return sendJson({
       status: "Online",
       uptime: Math.floor((Date.now() - serverStartTime) / 1000),
@@ -112,8 +120,8 @@ export default async (req, res) => {
     });
   }
 
-  // 2. action がなく、かつルートパスへのアクセスだった場合にのみ HTML を返す
-  if (urlObj.pathname === "/" && !action) {
+  // 2. パラメータなしのルートアクセス時は HTML ダッシュボードを返す
+  if ((urlObj.pathname === "/" || urlObj.pathname === "") && !action) {
     const fs = require("fs");
     const path = require("path");
     try {
@@ -125,12 +133,11 @@ export default async (req, res) => {
     } catch (e) {}
   }
 
-  requestCount++;
+  // 3. メインのAPI用ヘッダー定義
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET");
   res.setHeader("Content-Type", "application/json");
 
-  // レスポンス送信用の共通関数（res.jsonがない環境でも動くように補強）
   const sendResponse = (status, data) => {
     res.statusCode = status;
     if (typeof res.json === "function") {
