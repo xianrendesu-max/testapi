@@ -92,19 +92,10 @@ export default async (req, res) => {
   
   const action = getQueryParam("action");
 
-  if (urlObj.pathname === "/" && !action) {
-    const fs = require("fs");
-    const path = require("path");
-    try {
-      const htmlPath = path.join(process.cwd(), "status.html");
-      if (fs.existsSync(htmlPath)) {
-        res.setHeader("Content-Type", "text/html; charset=utf-8");
-        return res.end(fs.readFileSync(htmlPath, "utf-8"));
-      }
-    } catch (e) {}
-  }
-
+  // 1. 先に API 系のアクションを最優先で判定する
   if (action === "status_api") {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET");
     res.setHeader("Content-Type", "application/json");
     // res.json が未定義の環境対策としてフォールバックを用意
     const sendJson = (data) => {
@@ -119,6 +110,19 @@ export default async (req, res) => {
       ytInitialized: !!ytPromise,
       logs: recentLogs
     });
+  }
+
+  // 2. action がなく、かつルートパスへのアクセスだった場合にのみ HTML を返す
+  if (urlObj.pathname === "/" && !action) {
+    const fs = require("fs");
+    const path = require("path");
+    try {
+      const htmlPath = path.join(process.cwd(), "status.html");
+      if (fs.existsSync(htmlPath)) {
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        return res.end(fs.readFileSync(htmlPath, "utf-8"));
+      }
+    } catch (e) {}
   }
 
   requestCount++;
