@@ -172,40 +172,7 @@ export default async (req, res) => {
         });
       }
 
-      const videos = await Promise.all(
-        (result.results || [])
-          .filter(item => ["Video", "Channel"].includes(item.type))
-          .map(async item => {
-            if (item.type === "Video") {
-              const videoId = item.video_id || item.id;
-              return {
-                type: "video",
-                id: videoId,
-                title: item.title?.text || item.title?.runs?.[0]?.text || "無題",
-                duration: item.duration?.text || "不明",
-                publishedAt: formatPublishedAtJapanese(item.published?.text || ""),
-                channel: item.author?.name || "不明なチャンネル",
-                channelId: item.author?.id || "",
-                channelIcon: item.author?.thumbnails?.[0]?.url || "",
-                thumbnails: await generateThumbnails(videoId),
-                viewCount: normalizeViewCount(item.view_count?.text || ""),
-              };
-            } else if (item.type === "Channel") {
-              return {
-                type: "channel",
-                id: item.channel_id || item.id,
-                name: item.author?.name || "不明なチャンネル",
-                icon: item.author?.thumbnails?.[0]?.url || "",
-                subscriberCount: item.video_count?.text || "不明",
-              };
-            }
-          })
-      );
-
-      return sendResponse(200, {
-        results: videos,
-        nextPageToken: result.continuation || null,
-      });
+      return sendResponse(200, result);
     }
 
     if (action === "video") {
@@ -213,20 +180,7 @@ export default async (req, res) => {
       logActivity(`Action: video, id: ${id || ""}`);
 
       const info = await yt.getInfo(id);
-      const v = info.basic_info;
-
-      return sendResponse(200, {
-        title: v.title || "",
-        videoId: v.id || "",
-        videoThumbnails: v.thumbnail || [],
-        description: v.short_description || "",
-        lengthSeconds: v.duration?.seconds || 0,
-        viewCount: v.view_count || 0,
-        likeCount: v.like_count || 0,
-        author: v.author?.name || "",
-        authorId: v.author?.id || "",
-        publishedText: v.publish_date || ""
-      });
+      return sendResponse(200, info);
     }
 
     if (action === "comments") {
@@ -234,22 +188,7 @@ export default async (req, res) => {
       logActivity(`Action: comments, id: ${id || ""}`);
 
       const commentSection = await yt.getComments(id);
-      const commentThreads = commentSection.contents || [];
-
-      return sendResponse(200, {
-        commentCount: commentThreads.length,
-        comments: commentThreads.map(thread => {
-          const c = thread.comment;
-          return {
-            author: c?.author?.name || "",
-            authorId: c?.author?.id || "",
-            content: c?.content?.toString() || "",
-            publishedText: c?.published_time || "",
-            likeCount: c?.like_count || 0,
-            commentId: c?.comment_id || ""
-          };
-        })
-      });
+      return sendResponse(200, commentSection);
     }
 
     if (action === "related") {
@@ -257,21 +196,7 @@ export default async (req, res) => {
       logActivity(`Action: related, id: ${id || ""}`);
 
       const info = await yt.getInfo(id);
-
-      const related =
-        info.watch_next_feed?.secondary_results?.map(v => ({
-          type: "video",
-          title: v.title?.text || "",
-          videoId: v.id || "",
-          author: v.author?.name || "",
-          authorId: v.author?.id || "",
-          lengthSeconds: v.duration?.seconds || 0,
-          viewCountText: v.view_count?.text || ""
-        })) || [];
-
-      return sendResponse(200, {
-        recommendedVideos: related
-      });
+      return sendResponse(200, info.watch_next_feed || {});
     }
 
     if (action === "full") {
@@ -279,51 +204,22 @@ export default async (req, res) => {
       logActivity(`Action: full, id: ${id || ""}`);
 
       const info = await yt.getInfo(id);
-
-      let comments = [];
-
+      
+      let comments = null;
       try {
-        const commentSection = await yt.getComments(id);
-        const commentThreads = commentSection.contents || [];
-
-        comments = commentThreads.slice(0, 20).map(thread => {
-          const c = thread.comment;
-          return {
-            author: c?.author?.name || "",
-            content: c?.content?.toString() || "",
-            likeCount: c?.like_count || 0
-          };
-        });
+        comments = await yt.getComments(id);
       } catch {}
 
-      const feedVideos = info.watch_next_feed?.secondary_results || [];
-      const related =
-        feedVideos.slice(0, 20).map(v => ({
-          videoId: v.id || "",
-          title: v.title?.text || ""
-        })) || [];
-
       return sendResponse(200, {
-        title: info.basic_info?.title || "",
-        videoId: info.basic_info?.id || "",
-        description: info.basic_info?.short_description || "",
-        comments: comments,
-        recommendedVideos: related
+        info: info,
+        comments: comments
       });
     }
 
     if (action === "trending") {
       logActivity(`Action: trending`);
       const feed = await yt.getTrending();
-
-      return sendResponse(200, 
-        feed.videos.map(v => ({
-          title: v.title?.text || "",
-          videoId: v.id || "",
-          author: v.author?.name || "",
-          viewCount: parseInt(v.view_count?.text?.replace(/[^0-9]/g, "")) || 0
-        }))
-      );
+      return sendResponse(200, feed);
     }
 
     return sendResponse(400, {
